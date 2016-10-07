@@ -1,0 +1,2 @@
+# FIXED
+speech_est.obj: ../speech_est.c

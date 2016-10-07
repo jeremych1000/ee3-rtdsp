@@ -1,0 +1,76 @@
+
+
+	complex* out_buff=(complex*)calloc(FFTLEN,sizeof(complex));
+	float* speech_prob=(float*)calloc(FFTLEN,sizeof(float));
+	float* local_min=(float*)calloc(FFTLEN,sizeof(float));
+	float* subfactor=(float*)calloc(FFTLEN,sizeof(float));
+	float* speech_thres=(float*)calloc(FFTLEN,sizeof(float));
+	float prob_const=0.2;
+	float sub_const=0.85;
+	float gamma=0.998;
+	float beta=0.8;
+	float v=0.001;
+	float K=0.7;
+	float mu_k=5;
+void init_thres(void){
+	int k=0;
+	for (k=0;k<FFTLEN;k++){
+		if (k<=(int)(1000/FSAMP)*FFTLEN){
+			speech_thres[k]=2;
+		}
+		else{
+			if((k<=(int)(3000/FSAMP)*FFTLEN)&&(k>(int)(1000/FSAMP)*FFTLEN)){
+				speech_thres[k]=2;	
+			}
+			else{
+				speech_thres[k]=5;	
+			}
+		}
+	}
+}	
+	void ProcVswitch_estimator(void){
+	int k;	
+	float C;
+	float G;
+	fft(FFTLEN,inframe);
+	for(k=0;k<FFTLEN;k++){
+		frame_mag[k]=cabs(inframe[k]);
+			P[k]=(1-K)*(frame_mag[k]*frame_mag[k])+K*P[k];
+		}
+	if(--frame_count==-1){
+		frame_count=min_frame_rate; 
+		if(++min_buffer_index>OVERSAMP-1)min_buffer_index=0;
+			for(k=0;k<FFTLEN;k++){
+					frame_min_buffer[min_buffer_index*FFTLEN+k]=P[k];
+			}
+	}
+	else{
+		for(k=0;k<FFTLEN;k++){
+					if(P[k]<frame_min_buffer[min_buffer_index*FFTLEN+k])
+						frame_min_buffer[min_buffer_index*FFTLEN+k]=P[k];
+					else{
+						frame_min_buffer[min_buffer_index*FFTLEN+k]=gamma*frame_min_buffer[min_buffer_index*FFTLEN+k]+((1-gamma)/(1-beta))*(P[k]-beta*last_P[k]);
+					}
+			}
+		}
+	for (k=0;k<FFTLEN;k++){
+		local_min[k]=min(min(frame_min_buffer[k],frame_min_buffer[FFTLEN+k]),min(frame_min_buffer[k+FFTLEN*2],frame_min_buffer[k+FFTLEN*3]));
+		if((P[k]/local_min[k])>speech_thres[k]){
+			speech_prob[k]=prob_const*speech_prob[k]+1-prob_const;	
+		}
+		else{
+			speech_prob[k]=prob_const*speech_prob[k];
+		}
+
+		subfactor[k]=min(max(sub_const+(1-sub_const)*speech_prob[k],prob_const),1);
+		N[k]=subfactor[k]*N[k]+(1-subfactor[k])*frame_mag[k]*frame_mag[k];
+		C=max(frame_mag[k]*frame_mag[k]-N[k],v*N[k]);
+		G=C/((C+mu_k)*N[k]);
+		out_buff[k] = rmul(C, inframe[k]);  break;
+		last_P[k]=P[k];
+	}
+	
+	ifft(FFTLEN,out_buff);
+	
+	
+	}
